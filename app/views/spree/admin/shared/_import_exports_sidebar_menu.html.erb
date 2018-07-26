@@ -1,0 +1,5 @@
+<% if can? :admin, Spree::StalnoyImportExport %>
+  <ul class="nav nav-sidebar">
+    <%= tab Spree::StalnoyImportExport, url: spree.admin_stalnoy_io_index_url, icon: 'refresh', label: Spree.t(:import_export, scope: :stalnoy_import_export) %>
+  </ul>
+<% end %>
