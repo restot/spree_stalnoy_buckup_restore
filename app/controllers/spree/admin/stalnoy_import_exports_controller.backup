@@ -173,7 +173,6 @@ module Spree
 
         response.headers['Content-Type'] = 'text/event-stream'
         base_json = get_json(params[:ud])
-        resp = Hash[status: 'preparing',action:'api_check',hash:params[:path],id:params[:ud]]
 
         case params[:path]
         when 'country'#-------------------------------------------------------------------------------------------------
@@ -186,19 +185,26 @@ module Spree
                                      'numcode' => json['numcode'],
                                      'states_required' => json['states_required'],
                                      'zipcode_required' => json['zipcode_required'])
-          resp[:total]= base_json.count
-          resp[:last_row] = (t == true) ? base_json.count : 0
-          resp[:result] = t
-          response.stream.write "data: #{resp.to_json}\n\n"
+
+          response.stream.write "data: #{Hash['status' => 'preparing',
+                                              'total' => base_json.count,
+                                              'action' => 'api_check',
+                                              'last_row' => (t == true) ? base_json.count : 0,
+                                              'hash' => params[:path],
+                                              'id' => params[:ud],
+                                              'result' => t
+          ].to_json}\n\n"
         when 'states'#-------------------------------------------------------------------------------------------------
           base_json.each_with_index do |h, i|
             t = Spree::State.exists?(name: h["name"], abbr: h['abbr'], country_id: h['country_id'])
-
-            resp[:total]= base_json.count
-            resp[:last_row] = i + 1
-            resp[:hash] = params[:path]
-            resp[:result] = t
-            response.stream.write "data: #{resp.to_json}\n\n"
+            response.stream.write "data: #{Hash['status' => 'preparing',
+                                                'action' => 'api_check',
+                                                'total' => base_json.count,
+                                                'last_row' => i + 1,
+                                                'hash' => params[:path],
+                                                'id' => params[:ud],
+                                                'result' => t
+            ].to_json}\n\n"
           end
 
 
