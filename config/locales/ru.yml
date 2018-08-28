@@ -2,3 +2,6 @@ ru:
   spree:
     stalnoy_import_export:
       import_export: "Загрузка/Выгрузка"
+      downloading: "Загрузка"
+      preparing: "Проверка"
+      saved: "Сохранено"

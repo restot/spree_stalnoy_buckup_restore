@@ -5,5 +5,6 @@ Spree::Core::Engine.add_routes do
      get 'stalnoy_io_index', to: 'stalnoy_import_exports#index'
      get '/stalnoy_io/check/*path/*ud', to: 'stalnoy_import_exports#api_check', as: 'stalnoy_io_api_check'
      get '/stalnoy_io/put/*path/*ud', to: 'stalnoy_import_exports#api_put', as: 'stalnoy_io_api_put'
+     get '/stalnoy_io/get/*path/*ud', to: 'stalnoy_import_exports#api_get', as: 'stalnoy_io_api_get'
    end
 end
