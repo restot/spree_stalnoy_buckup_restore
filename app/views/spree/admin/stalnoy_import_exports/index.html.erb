@@ -218,7 +218,8 @@
 
                 j.innerText = text;
 
-            } else if (resp.status == "work") {
+            }
+            else if (resp.status == "work") {
                 bar = $('.progress[hash=' + resp.id.toString() +']')
                 a = $('.progress[hash=' + resp.id.toString() +']').children().last();
                 inc = 100 / resp.total;
@@ -259,14 +260,10 @@
 
             else if (resp.status == "done") {
                 d = "#p-content-" + resp.id.toString();
-                l = $('.progress[hash=' + resp.id.toString() +']').children().length - 1;
+                l = $('.progress[hash=' + resp.id.toString() +']').children().length - 2;
                 l = 100 / l;
                 $('.progress[hash=' + resp.id.toString() +']').children().not('.index').css('width', l.toString() + '%');
-               // d = "#p-content-" + resp.id.toString();
-               // p = "#vendor-name-" + resp.id.toString();
-               //  a = "#hash-bar-" + resp.id.toString();
                 progress = (resp.last_row /resp.total ) * 100;
-                //$(a).css('width',progress.toString() + '%');
                 text = "[ " + resp.last_row.toString() + " / " + resp.total.toString() + " ] " + progress.toString().substr(0, 5) +"% " + resp.text + " <%= Spree.t(:done, scope: :stalnoy_import)%>";
                 $(d).html(text);
 
