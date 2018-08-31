@@ -38,10 +38,10 @@ module Select
 
   def taxon_create(master, base_json)
     puts master
-    parent = base_json.select {|s| s['id'] == master['parent_id']}.first
+    parent = base_json.detect {|s| s['id'] == master['parent_id']}
     unless parent.nil?
       if Spree::Taxon.find_by(name: parent['name']).nil?
-        taxon = base_json.select {|s| s['name'] == parent['name']}.first
+        taxon = base_json.detect {|s| s['name'] == parent['name']}
 
         taxon_create(taxon, base_json)
 
@@ -71,7 +71,7 @@ module Select
   end
 
   def check_if_image_need_load(images,name)
-    if images.count == 0
+    if images.length == 0
       return true
     end
     assets = Spree::Asset.where(viewable_id: images.first.viewable_id)
@@ -86,7 +86,7 @@ module Select
   def reload_images(path,offset: 0)
     variants_json =JSON.parse(File.read(path + '/variants.json'))
     assets_json = JSON.parse(File.read(path + '/assets.json'))
-    count = Dir.glob('*', base: path.to_s).count
+    count = Dir.glob('*', base: path.to_s).length
     index = 1
     product_found = false
 
@@ -100,13 +100,13 @@ module Select
 
       puts "#{__LINE__.to_s} -| "+ this_path
       puts "#{__LINE__.to_s} -| "+ "---#{e}---"
-      img_count = Dir.glob('*',base: this_path).count
+      img_count = Dir.glob('*',base: this_path).length
         Dir.glob('*',base: this_path) do |image|
           puts "#{__LINE__.to_s} -| "+ "image: #{image.inspect}, #{image.class}"
-          asset = assets_json.select {|s| s['attachment_file_name'] == image.to_s}.first
+          asset = assets_json.detect {|s| s['attachment_file_name'] == image.to_s}
           puts "#{__LINE__.to_s} -| "+ asset.inspect
           if asset != nil
-            product =  variants_json.select {|s| s['id'] == asset['viewable_id'].to_i}.first
+            product =  variants_json.detect {|s| s['id'] == asset['viewable_id'].to_i}
             puts "#{__LINE__.to_s} -| "+ product.inspect
             if product != nil
               spree_product = Spree::Variant.find_by(sku: product['sku'])
@@ -159,6 +159,7 @@ end
 
 module Spree
   module Admin
+    # noinspection ALL
     class StalnoyImportExportsController < ResourceController
 
       include Select
@@ -173,7 +174,7 @@ def api_check         ##########################################################
 
   response.headers['Content-Type'] = 'text/event-stream'
   base_json = get_json(params[:ud])
-  resp = Hash[status: 'preparing',action:'api_check',id:params[:ud],total:base_json.count]
+  resp = Hash[status: 'preparing',action:'api_check',id:params[:ud],total:base_json.length]
   loop = false
 
   case take_name(params[:path])
@@ -188,7 +189,7 @@ def api_check         ##########################################################
                                'zipcode_required' => json['zipcode_required'])
 
 
-    resp[:last_row] = (t == true) ? base_json.count : 0
+    resp[:last_row] = (t == true) ? base_json.length : 0
     resp[:result] = t
 
   when 'states'#-------------------------------------------------------------------------------------------------
@@ -206,7 +207,7 @@ def api_check         ##########################################################
   when 'taxonomy'#-----------------------------------------------------------------------------------------------
     json = base_json.first
     t = Spree::Taxonomy.exists?(name: json['name'])
-    resp[:last_row] = (t == true) ? base_json.count : 0
+    resp[:last_row] = (t == true) ? base_json.length : 0
     resp[:result] = t
   when 'taxons'#-------------------------------------------------------------------------------------------------
     loop = true
@@ -307,9 +308,9 @@ def api_check         ##########################################################
       spree_active_storage_attachment = nil
       spree_active_storage_blob = nil
 
-      variant = variants.select {|p| p['id'] == h['viewable_id']}.first
-      active_storage_attachment =  active_storage_attachments.select {|p| p['record_id'] == h['id']}.first
-      active_storage_blob = active_storage_blobs.select {|p| p['id'] == active_storage_attachment['blob_id']}.first
+      variant = variants.detect {|p| p['id'] == h['viewable_id']}
+      active_storage_attachment =  active_storage_attachments.detect {|p| p['record_id'] == h['id']}
+      active_storage_blob = active_storage_blobs.detect {|p| p['id'] == active_storage_attachment['blob_id']}
 
       if variant != nil && active_storage_attachment !=nil && active_storage_blob !=nil
         spree_variant = Spree::Variant.find_by(sku: variant['sku'])
@@ -360,8 +361,8 @@ def api_check         ##########################################################
       property = nil
       spree_product = nil
       spree_property = nil
-      product = products.select {|p| p['id'] == h['product_id']}.first
-      property = properties.select {|p| p['id'] == h['property_id']}.first
+      product = products.detect {|p| p['id'] == h['product_id']}
+      property = properties.detect {|p| p['id'] == h['property_id']}
       if property != nil && product !=nil
         spree_product = Spree::Product.find_by(slug: product['slug'])
         spree_property = Spree::Property.find_by(name: property['name'], presentation: property['presentation'])
@@ -408,15 +409,10 @@ def api_check         ##########################################################
 
 
   else
-    json = get_json(params[:ud])
 
-    response.stream.write "data: #{Hash['status' => 'preparing',
-                                        'total' => json.count,
-                                        'last_row' => 0,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud]
+    resp[:last_row] = 0
+    resp[:result] = false
 
-    ].to_json}\n\n"
   end
   if loop
     resp[:status] = 'done'
@@ -448,12 +444,13 @@ def api_put           ##########################################################
 
   fails_array = []
 
+  resp = Hash[status: 'work',action:'api_put',id:params[:ud],total:base_json.length]
+  loop = false
+
   case take_name(params[:path])
   when 'country'#------------------------------------------------------------------------------------------------
-
     json = base_json.first
-    a = Spree::Country.create!(id: json['id'],
-                               'iso_name' => json['iso_name'],
+    a = Spree::Country.create!('iso_name' => json['iso_name'],
                                'iso' => json['iso'],
                                'iso3' => json['iso3'],
                                'name' => json['name'],
@@ -461,81 +458,58 @@ def api_put           ##########################################################
                                'states_required' => json['states_required'],
                                'zipcode_required' => json['zipcode_required'])
 
-    response.stream.write "data: #{Hash['status' => 'work',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'result' => a.valid?
-    ].to_json}\n\n"
-    unless a.valid?
-      fails_array << h
-    end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
 
+    resp[:last_row] = base_json.length
+    resp[:result] = a.valid?
+    unless a.valid?
+      fails_array << json
+    end
   when 'states'#-------------------------------------------------------------------------------------------------
+    loop = true
+    countries = get_json 'country'
 
     base_json.each_with_index do |h, i|
+      country = nil
+      spree_country = nil
+      country = countries.detect{|c| c['id'] == h['country_id']}
+      if country != nil
+        spree_country = Spree::Country.find_by(iso_name: country['iso_name'])
+        if spree_country !=nil
+          a = Spree::State.create!(name: h['name'], abbr: h['abbr'], country_id: spree_country.id)
 
-      a = Spree::State.create!(name: h['name'], abbr: h['abbr'], country_id: h['country_id'])
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => a.valid?
-      ].to_json}\n\n"
-      unless a.valid?
+        else
+          a = false
+        end
+
+      else
+        a = false
+      end
+      unless a.valid? || a == true
+        h['country'] = country
+        h['spree_country'] = (spree_country.nil?)? nil : spree_country.attributes
         fails_array << h
       end
+      resp[:last_row] = i + 1
+      resp[:result] = a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'taxonomy'#-----------------------------------------------------------------------------------------------
     json = base_json.first
-    a = Spree::Taxonomy.create!(id: json['id'], position: json['position'], name: json['name'])
-    response.stream.write "data: #{Hash['status' => 'work',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'result' => a.valid?
-    ].to_json}\n\n"
+    a = Spree::Taxonomy.create!(position: json['position'], name: json['name'])
+
+    resp[:last_row] = base_json.length
+    resp[:result] = a.valid?
     unless a.valid?
-      fails_array << h
+      fails_array << json
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'taxons'#-------------------------------------------------------------------------------------------------
+   loop = true
     base_json = base_json.each {|h|
       if h['parent_id'] == nil then
         h['parent_id'] = 0
       end}
     base_json = base_json.sort_by {|h| h['id']}
-    base_json = base_json.each_with_index {|h, i| h.merge!('index' => i + 1)}
+    base_json = base_json.each_with_index {|h, i| h['index'] = i + 1}
     base_json = base_json.sort_by {|h| h['parent_id']}
 
 
@@ -543,199 +517,117 @@ def api_put           ##########################################################
 
       ret = taxon_create(h, base_json)
 
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => ret
-      ].to_json}\n\n"
+      resp[:last_row] =  i + 1
+      resp[:result] = ret
+      response.stream.write "data: #{resp.to_json}\n\n"
       unless ret
         fails_array << h
       end
+
     end
-
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
-
-
   when 'sale_rate'#----------------------------------------------------------------------------------------------
-
+    loop = true
     base_json = base_json.sort_by {|h| h['id']}
     base_json.each_with_index do |h, i|
 
-      a = Spree::SaleRate.create(id: h['id'], currency: h['currency'], rate: h['rate'], tag: h['tag'])
+      a = Spree::SaleRate.create(currency: h['currency'], rate: h['rate'], tag: h['tag'])
 
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => a.valid?
-      ].to_json}\n\n"
-
+      resp[:last_row] =  i + 1
+      resp[:result] = a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
       unless a.valid?
         fails_array << h
       end
     end
-
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
-
   when 'product'#------------------------------------------------------------------------------------------------
-    variants_json = get_json('variant')
+    loop = true
+    variants = get_json'variant'
+    prices = get_json 'price'
     base_json = base_json.sort_by {|h| h['id']}
 
     base_json.each_with_index do |h, i|
-      startt = Time.now
-      a = Spree::Product.create!(
-          sku: variants_json.select {|s| s['product_id'] == h['id']}.first['sku'],
-          available_on: h['available_on'],
-          deleted_at: h['deleted_at'],
-          tax_category_id: h['tax_category_id'],
-          shipping_category_id: h['shipping_category_id'],
-          promotionable: h['promotionable'],
-          discontinue_on: h['discontinue_on'],
-          name: h['name'],
-          description: h['description'],
-          meta_title: h['meta_title'],
-          meta_description: h['meta_description'],
-          meta_keywords: h['meta_keywords'],
-          slug: h['slug'],
-          price: 0)
-
-      endt = Time.now
-      diff = endt - startt
-      if diff < 0.03
-        sleep(0.03 - diff)
+      variant = nil
+      price = nil
+      variant = variants.detect {|s| s['product_id'] == h['id']}
+      price = prices.detect{|p| p['variant_id'] == variant['id']}
+      if price != nil && variant != nil
+        a = Spree::Product.create!(
+            sku: variant['sku'],
+            available_on: h['available_on'],
+            deleted_at: h['deleted_at'],
+            tax_category_id: h['tax_category_id'],
+            shipping_category_id: h['shipping_category_id'],
+            promotionable: h['promotionable'],
+            discontinue_on: h['discontinue_on'],
+            name: h['name'],
+            description: h['description'],
+            meta_title: h['meta_title'],
+            meta_description: h['meta_description'],
+            meta_keywords: h['meta_keywords'],
+            slug: h['slug'],
+            price: (price['amount'].nil?)? price['amount'] : price['amount'].to_d,
+            weight: (variant['weight'].nil?)? variant['weight'] : variant['weight'].to_d,
+            height: (variant['height'].nil?)? variant['height'] : variant['height'].to_d,
+            width: (variant['width'].nil?)? variant['width'] : variant['width'].to_d,
+            depth: (variant['depth'].nil?)? variant['depth'] : variant['depth'].to_d,
+            is_master: variant['is_master'],
+            cost_price: (variant['cost_price'].nil?)? variant['cost_price'] : variant['cost_price'].to_d,
+            cost_currency: variant['cost_currency'],
+            tax_category_id: variant['tax_category_id'],
+            discontinue_on: variant['discontinue_on'] )
+      else
+        a = false
       end
-
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => a.valid?
-      ].to_json}\n\n"
-      unless a.valid?
+      resp[:last_row] = i + 1
+      resp[:result] = a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
+      unless a.valid? || a == true
+        h['variant'] = variant
+        h['price'] = price
         fails_array << h
       end
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'price'#--------------------------------------------------------------------------------------------------
-    # base_json.each_with_index do |h, i|
-    #   startt = Time.now
-    #   a = Spree::Price.find_by(variant_id: h['variant_id'])
-    #   if a.nil? then
-    #     a = false
-    #     fails_array << h
-    #   else
-    #     a.update(amount: h['amount'], currency: h['currency'])
-    #   end
-    #   endt = Time.now
-    #   diff = endt - startt
-    #   if diff < 0.03
-    #     sleep(0.03 - diff)
-    #   end
-    #   response.stream.write "data: #{Hash['status' => 'work',
-    #                                       'action' => 'api_put',
-    #                                       'total' => base_json.count,
-    #                                       'last_row' => i + 1,
-    #                                       'hash' => params[:path],
-    #                                       'id' => params[:ud],
-    #                                       'obj_id' => h['id'],
-    #                                       'result' => (a == false) ? a : a.valid?
-    #   ].to_json}\n\n"
-    # end
-    # response.stream.write "data: #{Hash['status' => 'done',
-    #                                     'action' => 'api_put',
-    #                                     'total' => base_json.count,
-    #                                     'last_row' => base_json.count,
-    #                                     'hash' => params[:path],
-    #                                     'id' => params[:ud],
-    #                                     'fails_array' => fails_array
-    # ].to_json}\n\n"
   when 'product_taxon'#------------------------------------------------------------------------------------------
-    count = 0
-    base_json.each {|t| count = count + t['products'].count}
-    product_json = get_json 'product'
-    count_index = 0
+    loop = true
+    products = get_json 'product'
     base_json.each_with_index do |h, i|
-      if h['products'] != nil
-        products = h['products']
-        products.each_with_index do |p, pI|
-          product = product_json.select {|s| s['slug'] == p['slug']}.first
-          if Spree::Product.find_by(name: product['name']).nil?
-            response.stream.write "data: #{Hash['status' => 'work',
-                                                'action' => 'api_put',
-                                                'total' => count,
-                                                'last_row' => count_index,
-                                                'hash' => params[:path],
-                                                'id' => params[:ud],
-                                                'obj_id' => h['id'],
-                                                'fallback' => 'product nil',
-                                                'result' => false
-            ].to_json}\n\n"
-            next
-          end
-          r = Spree::Product.find_by(slug: p['slug']).taxons = Spree::Taxon.where(name: h['name'])
-          count_index += 1;
-          response.stream.write "data: #{Hash['status' => 'work',
-                                              'action' => 'api_put',
-                                              'total' => count,
-                                              'last_row' => count_index,
-                                              'hash' => params[:path],
-                                              'id' => params[:ud],
-                                              'obj_id' => h['id'],
-                                              'result' => !r.first.nil?
-          ].to_json}\n\n"
-          if r.first.nil?
-            fails_array << p
+      spree_taxon = nil
+      if h['taxons'] != nil
+        h['taxons'].each do |t|
+          spree_taxon = Spree::Taxon.find_by(permalink: t['permalink'])
+          if spree_taxon != nil
+            spree_product_taxons = []
+            Spree::Product.find_by(slug: h['slug']).taxons.each {|t| spree_product_taxons << t}
+            spree_product_taxons << spree_taxon
+            r = Spree::Product.find_by(slug: h['slug']).taxons= spree_product_taxons
+            resp[:last_row] = i + 1
+            resp[:result] = !r.first.nil?
+            response.stream.write "data: #{resp.to_json}\n\n"
+            if r.first.nil?
+              fails_array << h
+            end
+          else
+            resp[:last_row] = i + 1
+            resp[:result] = false
+            h['note'] = 'TAXON NOT FOUND'
+            fails_array << h
+            response.stream.write "data: #{resp.to_json}\n\n"
           end
         end
+      else
+        resp[:last_row] = i + 1
+        resp[:result] = false
+        h['note'] = 'NO TAXONS'
+        fails_array << h
+        response.stream.write "data: #{resp.to_json}\n\n"
       end
-
     end
-
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => count,
-                                        'last_row' => count_index,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
-
   when 'variant'#------------------------------------------------------------------------------------------------
     product_json = get_json('product')
     base_json = base_json.sort_by {|h| h['id']}
     base_json.each_with_index do |h, i|
-      product = product_json.select {|s| s['id'] == h['product_id']}.first
+      product = product_json.detect {|s| s['id'] == h['product_id']}
       product = Spree::Product.find_by(name: product['name'])
 
       a = (product.nil?) ? nil : Spree::Variant.find_by(product_id: product.id)
@@ -744,44 +636,24 @@ def api_put           ##########################################################
                  height: h['height'],
                  width: h['width'],
                  depth: h['depth'],
-                 is_master: h['is_master'],
-                 cost_price: h['cost_price'],
-                 position: h['position'],
-                 cost_currency: h['cost_currency'],
-                 track_inventory: h['track_inventory'],
                  tax_category_id: h['tax_category_id'],
                  discontinue_on: h['discontinue_on'])
       else
         fails_array << h
       end
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => !a.nil?
-      ].to_json}\n\n"
+      resp[:last_row] = i + 1
+      resp[:result] = !a.nil?
+      response.stream.write "data: #{resp.to_json}\n\n"
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'assets'#-------------------------------------------------------------------------------------------------
+    loop = true
     variants_json = get_json('variant')
 
     base_json.each_with_index do |h, i|
-      select = variants_json.select {|s| s['id'] == h['viewable_id']}.first
+      select = variants_json.detect {|s| s['id'] == h['viewable_id']}
       viewable_id = Spree::Variant.find_by(sku: select['sku'])
       unless viewable_id.nil?
-
-        a = Spree::Asset.create!(id: h['id'],
-                                 viewable_type: h['viewable_type'],
+        a = Spree::Asset.create!(viewable_type: h['viewable_type'],
                                  viewable_id: viewable_id.id,
                                  attachment_width: h['attachment_width'],
                                  attachment_height: h['attachment_height'],
@@ -797,61 +669,36 @@ def api_put           ##########################################################
           fails_array << h
         end
       end
-
-      response.stream.write "data: #{Hash['status' => 'preparing',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => viewable_id.nil? ? false : a.valid?
-      ].to_json}\n\n"
+      resp[:last_row] = i + 1
+      resp[:result] = viewable_id.nil? ? false : a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'properties'#---------------------------------------------------------------------------------------------
-    base_json.each_with_index do |h, i|
-      a = Spree::Property.create!(name: h['name'], presentation: h['presentation'])
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.count,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => a.valid?
-      ].to_json}\n\n"
-      unless a.valid?
-        fails_array << h
-      end
-    end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
+      index = 0
+      while index < base_json.size
+        h = base_json[index]
 
+        a = Spree::Property.create!(name: h['name'], presentation: h['presentation'])
+        resp[:last_row] = index + 1
+        resp[:result] = a.valid?
+        response.stream.write "data: #{resp.to_json}\n\n"
+        unless a.valid?
+          fails_array << h
+        end
+        index += 1
+      end
   when 'product_property'#---------------------------------------------------------------------------------------
     product_json = get_json 'product'
     property_json = get_json 'properties'
 
-    base_json.each_with_index do |h, i|
+    index = 0
+    while index < base_json.size
+      h = base_json[index]
 
-
-      product = product_json.select {|s| s['id'] == h['product_id']}.first
+      product = product_json.detect {|s| s['id'] == h['product_id']}
       product = Spree::Product.find_by(name: product['name'])
 
-      property = property_json.select {|s| s['id'] == h['property_id']}.first
+      property = property_json.detect {|s| s['id'] == h['property_id']}
       property = Spree::Property.find_by(name: property['name'])
 
       if !property.nil? and !product.nil? then
@@ -860,36 +707,18 @@ def api_put           ##########################################################
                                            product_id: product.id,
                                            property_id: property.id,
                                            position: h['position'])
-        response.stream.write "data: #{Hash['status' => 'work',
-                                            'action' => 'api_put',
-                                            'total' => base_json.count,
-                                            'last_row' => i + 1,
-                                            'hash' => params[:path],
-                                            'id' => params[:ud],
-                                            'obj_id' => h['id'],
-                                            'result' => !a.nil?
-        ].to_json}\n\n"
+
+        resp[:last_row] = index + 1
+        resp[:result] = !a.nil?
+        response.stream.write "data: #{resp.to_json}\n\n"
       else
         fails_array << h
-        response.stream.write "data: #{Hash['status' => 'work',
-                                            'action' => 'api_put',
-                                            'total' => base_json.count,
-                                            'last_row' => i + 1,
-                                            'hash' => params[:path],
-                                            'id' => params[:ud],
-                                            'obj_id' => h['id'],
-                                            'result' => false
-        ].to_json}\n\n"
+        resp[:result] = false
+        resp[:last_row] = index + 1
+        response.stream.write "data: #{resp.to_json}\n\n"
       end
+      index += 1
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
   when 'stalnoy_import'#-----------------------------------------------------------------------------------------
     base_json = base_json.sort_by {|h| h['id']}
     base_json.each_with_index do |h, i|
@@ -902,7 +731,7 @@ def api_put           ##########################################################
                                       last_row: h['last_row'])
       response.stream.write "data: #{Hash['status' => 'work',
                                           'action' => 'api_put',
-                                          'total' => base_json.count,
+                                          'total' => base_json.length,
                                           'last_row' => i + 1,
                                           'hash' => params[:path],
                                           'id' => params[:ud],
@@ -916,8 +745,8 @@ def api_put           ##########################################################
     end
     response.stream.write "data: #{Hash['status' => 'done',
                                         'action' => 'api_put',
-                                        'total' => base_json.count,
-                                        'last_row' => base_json.count,
+                                        'total' => base_json.length,
+                                        'last_row' => base_json.length,
                                         'hash' => params[:path],
                                         'id' => params[:ud],
                                         'fails_array' => fails_array
@@ -925,7 +754,21 @@ def api_put           ##########################################################
 
 
   else
-  end#-----------------------------------------------------------------------------------------------------------
+    resp[:last_row] = 0
+    resp[:result] = false
+  end
+  if loop
+    resp[:status] = 'done'
+    resp[:text] = ''
+    response.stream.write "data: #{resp.to_json}\n\n"
+  end
+  response.stream.write "data: #{resp.to_json}\n\n" unless loop
+  unless fails_array.empty?
+    resp[:status] = 'report'
+    resp[:action] = 'show_fails'
+    resp[:content] = fails_array
+    response.stream.write "data: #{resp.to_json}\n\n"
+  end
 rescue IOError, ActionController::Live::ClientDisconnected
   logger.info 'Stream closed'
 rescue StandardError => e

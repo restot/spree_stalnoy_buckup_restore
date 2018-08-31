@@ -254,7 +254,7 @@
                 }
                 d = "#p-content-" + resp.id.toString();
                 progress_all = (resp.last_row /resp.total ) * 100;
-                text = "[ " + resp.last_row.toString() + " / " + resp.total.toString() + " ] " + progress_all.toString().substr(0, 5) +"% " + resp.hash + " <%= Spree.t(:preparing, scope: :stalnoy_import)%>";
+                text = "[ " + resp.last_row.toString() + " / " + resp.total.toString() + " ] " + progress_all.toString().substr(0, 5) +"% "  + " <%= Spree.t(:preparing, scope: :stalnoy_import)%>";
                 $(d).html(text);
             }
 
@@ -325,8 +325,8 @@
 
             else if (resp.status == "error") {
                 $('#myModal').modal()
-                $('#modal-content').html(resp.content);
-                $('#modal-trace').html(resp.trace);
+                $('#modal-content').html(JSON.stringify(resp.content));
+                $('#modal-trace').html(JSON.stringify(resp.trace));
             }
 
             else {
