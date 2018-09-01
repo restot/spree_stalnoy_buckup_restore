@@ -367,7 +367,7 @@ def api_check         ##########################################################
         spree_product = Spree::Product.find_by(slug: product['slug'])
         spree_property = Spree::Property.find_by(name: property['name'], presentation: property['presentation'])
         if spree_product != nil && spree_property !=nil
-          a = Spree::ProductProperty.where(product_id: spree_product.id, property_id: spree_property.id).exists?(value: h['value'])
+          a = Spree::ProductProperty.exists?(value: h['value'],product_id: spree_product.id)
         else
           a = false
         end
@@ -675,10 +675,10 @@ def api_put           ##########################################################
     end
   when 'properties'#---------------------------------------------------------------------------------------------
       index = 0
-      while index < base_json.size
+      while index < base_json.length
         h = base_json[index]
 
-        a = Spree::Property.create!(name: h['name'], presentation: h['presentation'])
+        a = Spree::Property.find_or_create_by!(name: h['name'], presentation: h['presentation'])
         resp[:last_row] = index + 1
         resp[:result] = a.valid?
         response.stream.write "data: #{resp.to_json}\n\n"
@@ -688,35 +688,46 @@ def api_put           ##########################################################
         index += 1
       end
   when 'product_property'#---------------------------------------------------------------------------------------
-    product_json = get_json 'product'
-    property_json = get_json 'properties'
+    products = get_json 'product'
+    properties = get_json 'properties'
 
     index = 0
-    while index < base_json.size
+    while index < base_json.length
+      product = nil
+      spree_product = nil
+      property = nil
+      spree_property = nil
+
       h = base_json[index]
 
-      product = product_json.detect {|s| s['id'] == h['product_id']}
-      product = Spree::Product.find_by(name: product['name'])
+      product = products.detect {|s| s['id'] == h['product_id']}
+      property = properties.detect {|s| s['id'] == h['property_id']}
 
-      property = property_json.detect {|s| s['id'] == h['property_id']}
-      property = Spree::Property.find_by(name: property['name'])
-
-      if !property.nil? and !product.nil? then
-
-        a = Spree::ProductProperty.create!(value: h['value'],
-                                           product_id: product.id,
-                                           property_id: property.id,
-                                           position: h['position'])
-
-        resp[:last_row] = index + 1
-        resp[:result] = !a.nil?
-        response.stream.write "data: #{resp.to_json}\n\n"
+      if property != nil and product != nil
+        spree_product = Spree::Product.find_by(slug: product['slug'])
+        spree_property = Spree::Property.find_by(name: property['name'],presentation:property['presentation'])
+        if spree_property != nil and spree_product != nil
+          a = Spree::ProductProperty.create!(value: h['value'],
+                                             product_id: spree_product.id,
+                                             property_id: spree_property.id,
+                                             position: h['position'])
+        else
+          a = false
+        end
       else
-        fails_array << h
-        resp[:result] = false
-        resp[:last_row] = index + 1
-        response.stream.write "data: #{resp.to_json}\n\n"
+        a = false
       end
+
+      unless a.valid? || a == true
+        h['product'] = product
+        h['property'] = property
+        h['spree_product'] = (spree_product.nil?)? nil : spree_product.attributes
+        h['spree_property'] = (spree_property.nil?)? nil : spree_property.attributes
+        fails_array << h
+      end
+      resp[:last_row] = index + 1
+      resp[:result] = (a == false)? false : a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
       index += 1
     end
   when 'stalnoy_import'#-----------------------------------------------------------------------------------------
@@ -729,30 +740,71 @@ def api_put           ##########################################################
                                       data: h['data'],
                                       data_prepared: h['data_prepared'],
                                       last_row: h['last_row'])
-      response.stream.write "data: #{Hash['status' => 'work',
-                                          'action' => 'api_put',
-                                          'total' => base_json.length,
-                                          'last_row' => i + 1,
-                                          'hash' => params[:path],
-                                          'id' => params[:ud],
-                                          'obj_id' => h['id'],
-                                          'result' => a.valid?
-      ].to_json}\n\n"
+      resp[:result] = a.valid?
+      resp[:last_row] = index + 1
+      response.stream.write "data: #{resp.to_json}\n\n"
 
       unless a.valid?
         fails_array << h
       end
     end
-    response.stream.write "data: #{Hash['status' => 'done',
-                                        'action' => 'api_put',
-                                        'total' => base_json.length,
-                                        'last_row' => base_json.length,
-                                        'hash' => params[:path],
-                                        'id' => params[:ud],
-                                        'fails_array' => fails_array
-    ].to_json}\n\n"
+  when 'active_storage_attachments'
+    loop = true
+    index = 0
+    records = get_json 'assets'
+    blobs = get_json 'active_storage_blobs'
+    while index < base_json.length
+      blob = nil
+      record = nil
+      spree_blob = nil
+      spree_record = nil
 
+      h = base_json[index]
+      blob = blobs.detect {|b| b['id'] == h['blob_id']}
+      record = records.detect {|r| r['id'] == h['record_id']}
 
+      if record !=nil && blob !=nil
+        spree_record = Spree::Asset.find_by(attachment_file_name: record['attachment_file_name'])
+        spree_blob = ActiveStorage::Blob.find_by(filename: blob['filename'])
+        if spree_record !=nil && spree_blob !=nil
+          a = ActiveStorage::Attachment.create!(name: h['name'],
+                                                record_type: h['record_type'],
+                                                record_id: spree_record.id,
+                                                blob_id: spree_blob.id)
+        else
+          a = false
+        end
+      else
+        a = false
+      end
+
+      resp[:last_row] = index + 1
+      resp[:result] = (a == false)? false : a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
+      unless a.valid? || a == true
+        fails_array << h
+      end
+      index += 1
+    end
+  when 'active_storage_blobs'
+    loop = true
+    index = 0
+    while index < base_json.length
+      h= base_json[index]
+      a = ActiveStorage::Blob.create!(key: h['key'],
+                                  filename: h['filename'],
+                                  content_type: h['content_type'],
+                                  metadata: h['metadata'],
+                                  byte_size: h['byte_size'],
+                                  checksum: h['checksum'])
+      resp[:last_row] = index + 1
+      resp[:result] = a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
+      unless a.valid?
+        fails_array << h
+      end
+      index += 1
+    end
   else
     resp[:last_row] = 0
     resp[:result] = false
@@ -814,9 +866,9 @@ def api_get           ##########################################################
   when 'stalnoy_import'#-----------------------------------------------------------------------------------------
     t = File.open(File.path(Rails.root.join('export/6_stalnoy_import.json')) , 'w+') {|f| f.write(Spree::StalnoyImport.all.to_json) }
   when 'active_storage_attachments'
-    t = File.open(File.path(Rails.root.join('export/5.3_active_storage_attachments.json')) , 'w+') {|f| f.write(ActiveStorage::Attachment.all.to_json) }
+    t = File.open(File.path(Rails.root.join('export/5.4_active_storage_attachments.json')) , 'w+') {|f| f.write(ActiveStorage::Attachment.all.to_json) }
   when 'active_storage_blobs'
-    t = File.open(File.path(Rails.root.join('export/5.4_active_storage_blobs.json')) , 'w+') {|f| f.write(ActiveStorage::Blob.all.all.to_json) }
+    t = File.open(File.path(Rails.root.join('export/5.3_active_storage_blobs.json')) , 'w+') {|f| f.write(ActiveStorage::Blob.all.all.to_json) }
   end
   resp[:status] = 'done'
   resp[:total] = 1
