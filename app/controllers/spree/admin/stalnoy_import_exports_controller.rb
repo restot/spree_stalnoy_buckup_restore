@@ -1,3 +1,4 @@
+
 module Select
   def take_name (name)
     /.*[1-9]_(.*)\.json/.match(name)[1]
@@ -159,11 +160,11 @@ end
 
 module Spree
   module Admin
-    # noinspection ALL
     class StalnoyImportExportsController < ResourceController
 
       include Select
       include ActionController::Live
+      include FileUtils
 
       def index
       end
@@ -805,6 +806,36 @@ def api_put           ##########################################################
       end
       index += 1
     end
+  when 'yml_codes'
+    loop = true
+    index = 0
+    while index < base_json.length
+      h= base_json[index]
+      a = Spree::YmlCode.create!(name: h['name'],
+                                 link: h['link'],
+                                 last_update: h['last_update'],
+                                 count: h['count'],
+                                 in_store_count: h['in_store_count'],
+                                 identical: h['identical'],
+                                 various: h['various'],
+                                 various_array: h['various_array'],
+                                 not_in_store: h['not_in_store'],
+                                 not_in_store_array: h['not_in_store_array'],
+                                 initialized: h['initialized'],
+                                 checksum: h['checksum'],
+                                 repeat_at: h['repeat_at'],
+                                 update_price: h['update_price'],
+                                 update_available: h['update_available'],
+                                 report_id: h['report_id'],
+                                 cron: h['cron'])
+      resp[:last_row] = index + 1
+      resp[:result] = a.valid?
+      response.stream.write "data: #{resp.to_json}\n\n"
+      unless a.valid?
+        fails_array << h
+      end
+      index += 1
+    end
   else
     resp[:last_row] = 0
     resp[:result] = false
@@ -821,6 +852,7 @@ def api_put           ##########################################################
     resp[:content] = fails_array
     response.stream.write "data: #{resp.to_json}\n\n"
   end
+
 rescue IOError, ActionController::Live::ClientDisconnected
   logger.info 'Stream closed'
 rescue StandardError => e
@@ -833,42 +865,51 @@ ensure
 end
 
 def api_get           ###########################################################################################
+
   response.headers['Content-Type'] = 'text/event-stream'
   resp = Hash[action:'api_get',id:params[:ud]]
 
+  path = Rails.root.join("export", "#{Time.now.strftime "%Y-%m-%d %H:00"}")
+  unless File.directory?(path)
+    FileUtils.mkdir_p(path)
+  end
+
   case take_name(params[:path])
   when 'country'#------------------------------------------------------------------------------------------------
-   t = File.open(File.path(Rails.root.join('export/1.1_country.json')) , 'w+') {|f| f.write(Spree::Country.all.to_json) }
+   t = File.open(File.path(Rails.root.join(path, '1.1_country.json')) , 'w+') {|f| f.write(Spree::Country.all.to_json) }
   when 'states'#-------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/1.2_states.json')) , 'w+') {|f| f.write(Spree::State.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '1.2_states.json')) , 'w+') {|f| f.write(Spree::State.all.to_json) }
   when 'taxonomy'#-----------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/2.1_taxonomy.json')) , 'w+') {|f| f.write(Spree::Taxonomy.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '2.1_taxonomy.json')) , 'w+') {|f| f.write(Spree::Taxonomy.all.to_json) }
   when 'taxons'#-------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/2.2_taxons.json')) , 'w+') {|f| f.write(Spree::Taxon.order('parent_id ASC').to_json) }
+    t = File.open(File.path(Rails.root.join(path, '2.2_taxons.json')) , 'w+') {|f| f.write(Spree::Taxon.order('parent_id ASC').to_json) }
   when 'sale_rate'#----------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/3_sale_rate.json')) , 'w+') {|f| f.write(Spree::SaleRate.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '3_sale_rate.json')) , 'w+') {|f| f.write(Spree::SaleRate.all.to_json) }
   when 'product'#------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/4.1_product.json')) , 'w+') {|f| f.write(Spree::Product.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '4.1_product.json')) , 'w+') {|f| f.write(Spree::Product.all.to_json) }
   when 'price'#--------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/4.2_price.json')) , 'w+') {|f| f.write(Spree::Price.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '4.2_price.json')) , 'w+') {|f| f.write(Spree::Price.all.to_json) }
   when 'product_taxon'#------------------------------------------------------------------------------------------
     pt = []
     Spree::Product.all.each{|p| h = {'id'=>p.id, 'name' => p.name, 'slug'=>p.slug,'taxons'=>[]}; p.taxons.each{|t| h['taxons'] << {'id' => t.id, 'parent_id' => t.parent.id, 'permalink' => t.permalink, 'name' => t.name, 'taxonomy_id' => t.taxonomy_id, 'position' => t.position}};pt << h }
-    t = File.open(File.path(Rails.root.join('export/4.3_product_taxon.json')) , 'w+') {|f| f.write(pt.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '4.3_product_taxon.json')) , 'w+') {|f| f.write(pt.to_json) }
   when 'variant'#------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/5.1_variant.json')) , 'w+') {|f| f.write(Spree::Variant.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.1_variant.json')) , 'w+') {|f| f.write(Spree::Variant.all.to_json) }
   when 'assets'#-------------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/5.2_assets.json')) , 'w+') {|f| f.write(Spree::Image.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.2_assets.json')) , 'w+') {|f| f.write(Spree::Image.all.to_json) }
   when 'properties'#---------------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/5.5_properties.json')) , 'w+') {|f| f.write(Spree::Property.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.5_properties.json')) , 'w+') {|f| f.write(Spree::Property.all.to_json) }
   when 'product_property'#---------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/5.6_product_property.json')) , 'w+') {|f| f.write(Spree::ProductProperty.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.6_product_property.json')) , 'w+') {|f| f.write(Spree::ProductProperty.all.to_json) }
   when 'stalnoy_import'#-----------------------------------------------------------------------------------------
-    t = File.open(File.path(Rails.root.join('export/6_stalnoy_import.json')) , 'w+') {|f| f.write(Spree::StalnoyImport.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '6_stalnoy_import.json')) , 'w+') {|f| f.write(Spree::StalnoyImport.all.to_json) }
   when 'active_storage_attachments'
-    t = File.open(File.path(Rails.root.join('export/5.4_active_storage_attachments.json')) , 'w+') {|f| f.write(ActiveStorage::Attachment.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.4_active_storage_attachments.json')) , 'w+') {|f| f.write(ActiveStorage::Attachment.all.to_json) }
   when 'active_storage_blobs'
-    t = File.open(File.path(Rails.root.join('export/5.3_active_storage_blobs.json')) , 'w+') {|f| f.write(ActiveStorage::Blob.all.all.to_json) }
+    t = File.open(File.path(Rails.root.join(path, '5.3_active_storage_blobs.json')) , 'w+') {|f| f.write(ActiveStorage::Blob.all.all.to_json) }
+  when 'yml_codes'
+    t = File.open(File.path(Rails.root.join(path, '7_yml_codes.json')) , 'w+') {|f| f.write(ActiveStorage::Blob.all.all.to_json) }
+
   end
   resp[:status] = 'done'
   resp[:total] = 1
