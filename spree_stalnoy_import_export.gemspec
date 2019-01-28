@@ -2,12 +2,11 @@
 lib = File.expand_path('../lib/', __FILE__)
 $LOAD_PATH.unshift lib unless $LOAD_PATH.include?(lib)
 
-require 'spree_stalnoy_import_export/version'
 
 Gem::Specification.new do |s|
   s.platform    = Gem::Platform::RUBY
   s.name        = 'spree_stalnoy_import_export'
-  s.version     = SpreeStalnoyImportExport.version
+  s.version     = '0.1.3'
   s.summary     = 'Add extension summary here'
   s.description = 'Add (optional) extension description here'
   s.required_ruby_version = '>= 2.2.7'
