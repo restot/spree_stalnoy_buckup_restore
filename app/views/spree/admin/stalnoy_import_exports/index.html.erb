@@ -124,15 +124,15 @@
             last_result == undefined;
         }
         if ($(e.currentTarget).attr('action') == 'put') {
-           var eventSource = new EventSource('<%= admin_stalnoy_io_api_put_path %>' + key + '/' + id);
+           var eventSource = new EventSource('/admin/stalnoy_io/put/' + key + '/' + id);
         }
         if ($(e.currentTarget).attr('action') == 'check') {
 
-            var eventSource = new EventSource('<%= admin_stalnoy_io_api_check_path %>' + key + '/' + id);
+            var eventSource = new EventSource('/admin/stalnoy_io/check/' + key + '/' + id);
         }
         if ($(e.currentTarget).attr('action') == 'get') {
 
-            var eventSource = new EventSource('<%= admin_stalnoy_io_api_get_path %>' + key + '/' + id);
+            var eventSource = new EventSource('/admin/stalnoy_io/get/' + key + '/' + id);
         }
 
 
